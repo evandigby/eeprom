@@ -1,0 +1,5 @@
+{
+    "sketch": "eeprom.ino",
+    "board": "arduino:avr:leonardo",
+    "programmer": "arduino:avrisp"
+}
