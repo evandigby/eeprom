@@ -1,5 +1,6 @@
 {
     "sketch": "eeprom.ino",
     "board": "arduino:avr:leonardo",
-    "programmer": "arduino:avrisp"
+    "programmer": "arduino:avrisp",
+    "port": "COM4"
 }
