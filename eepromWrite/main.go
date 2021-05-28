@@ -2,9 +2,9 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"time"
 
 	"github.com/tarm/serial"
@@ -19,97 +19,102 @@ const (
 	CMD_ACK = 199
 )
 
-func waitOn(r io.Reader, val byte) {
+func waitOn(r io.Reader, val byte) error {
 	readBuf := make([]byte, 1)
 	n, err := r.Read(readBuf)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	if n == 0 {
-		log.Fatal("read timeout")
+		return errors.New("read timeout")
 	}
 
 	if readBuf[0] != val {
-		log.Fatalf("Error: %v", readBuf[0])
+		return fmt.Errorf("expected %v but got %v", val, readBuf[0])
 	}
+
+	return nil
+}
+
+func sendCmd(rw io.ReadWriter, cmd byte, address uint16, operand0 byte) error {
+	cmdBuf := makeCmd(cmd, address, operand0)
+	_, err := rw.Write(cmdBuf)
+	if err != nil {
+		return err
+	}
+
+	return waitOn(rw, CMD_ACK)
+}
+
+func readData(rw io.ReadWriter, address uint16, buf []byte) error {
+	err := sendCmd(rw, CMD_READ, address, byte(len(buf)))
+	if err != nil {
+		return err
+	}
+
+	i := 0
+	for i < len(buf) {
+		n, err := rw.Read(buf[i:])
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return errors.New("read timeout")
+		}
+		i += n
+	}
+
+	return waitOn(rw, CMD_SUCCESS)
+}
+
+func writePage(rw io.ReadWriter, address uint16, buf []byte) error {
+	err := sendCmd(rw, CMD_WRITE_PAGE, address, byte(len(buf)))
+	if err != nil {
+		return err
+	}
+
+	n, err := rw.Write(buf)
+	if err != nil {
+		return err
+	}
+	if n < len(buf) {
+		return errors.New("read timeout")
+	}
+
+	return waitOn(rw, CMD_SUCCESS)
+}
+
+func makeCmd(cmd byte, address uint16, operand0 byte) []byte {
+	cmdBuf := make([]byte, 4)
+	cmdBuf[0] = cmd
+	binary.BigEndian.PutUint16(cmdBuf[1:], 0)
+	cmdBuf[3] = operand0
+	return cmdBuf
 }
 
 func main() {
 	c := &serial.Config{Name: "COM4", Baud: 115200, ReadTimeout: time.Second}
 	s, err := serial.OpenPort(c)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	defer s.Close()
 
 	defer s.Flush()
 
-	data := []byte("I am a reasonable sentance.")
+	data := []byte("I am a big reasonable sentance.")
 
-	cmd := make([]byte, 4)
-	cmd[0] = CMD_READ
-	binary.BigEndian.PutUint16(cmd[1:], 0)
-	cmd[3] = byte(len(data))
-
-	_, err = s.Write(cmd)
+	err = writePage(s, 0, data)
 	if err != nil {
-		log.Fatal(err)
-	}
-	s.Flush()
-
-	waitOn(s, CMD_ACK)
-
-	readData := make([]byte, len(data))
-	for i := range readData {
-		readBuf := make([]byte, 1)
-		n, err := s.Read(readBuf)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if n == 0 {
-			log.Fatal("read timeout")
-		}
-
-		readData[i] = readBuf[0]
+		panic(err)
 	}
 
-	waitOn(s, CMD_SUCCESS)
+	buf := make([]byte, len(data))
+	err = readData(s, 0, buf)
+	if err != nil {
+		panic(err)
+	}
 
-	value := string(readData)
-	fmt.Println("Read:", value)
+	fmt.Println(string(buf))
 }
-
-// _, err = s.Write([]byte{CMD_WRITE_PAGE})
-// if err != nil {
-// 	log.Fatal(err)
-// }
-// fmt.Println(2)
-
-// u16buf := make([]byte, 2)
-
-// binary.BigEndian.PutUint16(u16buf, 0)
-
-// _, err = s.Write(u16buf)
-// if err != nil {
-// 	log.Fatal(err)
-// }
-// fmt.Println(3)
-
-// _, err = s.Write([]byte{byte(len(data))})
-// if err != nil {
-// 	log.Fatal(err)
-// }
-// fmt.Println(4)
-
-// _, err = s.Write(data)
-// if err != nil {
-// 	log.Fatal(err)
-// }
-
-// response := make([]byte, 1)
-// _, err = s.Read(response)
-// if err != nil {
-// 	log.Fatal(err)
-// }
-// fmt.Println(6, " - ", int8(response[0]))

@@ -123,7 +123,7 @@ void eepromWrite(uint16_t address, uint8_t data, bool waitForComplete)
     waitForWriteComplete(address, data);
 }
 
-int8_t eepromWritePage(uint16_t startAddress, uint8_t length, uint8_t data[PAGE_LENGTH])
+uint8_t eepromWritePage(uint16_t startAddress, uint8_t length, uint8_t data[PAGE_LENGTH])
 {
     if (length < 1 || length > PAGE_LENGTH)
         return ERROR_INVALID_LENGTH;
@@ -197,7 +197,7 @@ void loop()
     uint8_t response = ERROR_UNKNOWN;
 
     readResult = Serial.readBytes(buf, 4);
-    if (readResult == 0)
+    if (readResult < 4)
     {
         Serial.write(ERROR_NO_DATA_SENT);
         return;
@@ -209,8 +209,7 @@ void loop()
     operand0 = buf[3];
 
     Serial.write(CMD_ACK);
-    Serial.flush();
-
+    
     switch (cmd)
     {
     case CMD_WRITE:
